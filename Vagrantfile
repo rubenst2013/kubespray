@@ -34,6 +34,7 @@ SUPPORTED_OS = {
   "oraclelinux8"        => {box: "generic/oracle8",            user: "vagrant"},
   "rhel7"               => {box: "generic/rhel7",              user: "vagrant"},
   "rhel8"               => {box: "generic/rhel8",              user: "vagrant"},
+  "minokube-ubuntu2004" => {box: "rst/ubuntu-server-20.04-0.6.0-b02", user: "vagrant"},
 }
 
 if File.exist?(CONFIG)
@@ -41,25 +42,27 @@ if File.exist?(CONFIG)
 end
 
 # Defaults for config options defined in CONFIG
-$num_instances ||= 3
+$num_instances ||= 5
 $instance_name_prefix ||= "k8s"
 $vm_gui ||= false
-$vm_memory ||= 2048
-$vm_cpus ||= 2
+$vm_memory ||= 16 * 1024
+$vm_memory_master ||= 3 * 1024
+$vm_cpus ||= 4
+$vm_cpus_master ||= 2
 $shared_folders ||= {}
 $forwarded_ports ||= {}
 $subnet ||= "172.18.8"
 $subnet_ipv6 ||= "fd3c:b398:0698:0756"
-$os ||= "ubuntu1804"
-$network_plugin ||= "flannel"
+$os ||= "minokube-ubuntu2004"
+$network_plugin ||= "calico"
 # Setting multi_networking to true will install Multus: https://github.com/intel/multus-cni
 $multi_networking ||= false
 $download_run_once ||= "True"
 $download_force_cache ||= "True"
 # The first three nodes are etcd servers
-$etcd_instances ||= $num_instances
+$etcd_instances ||= 3 # $num_instances
 # The first two nodes are kube masters
-$kube_master_instances ||= $num_instances == 1 ? $num_instances : ($num_instances - 1)
+$kube_master_instances ||= 3 # $num_instances == 1 ? $num_instances : ($num_instances - 1)
 # All nodes are kube nodes
 $kube_node_instances ||= $num_instances
 # The following only works when using the libvirt provider
@@ -68,7 +71,7 @@ $kube_node_instances_with_disks_size ||= "20G"
 $kube_node_instances_with_disks_number ||= 2
 $override_disk_size ||= false
 $disk_size ||= "20GB"
-$local_path_provisioner_enabled ||= false
+$local_path_provisioner_enabled ||= true
 $local_path_provisioner_claim_root ||= "/opt/local-path-provisioner/"
 $libvirt_nested ||= false
 
@@ -121,6 +124,50 @@ Vagrant.configure("2") do |config|
     config.disksize.size = $disk_size
   end
 
+  (1..$kube_master_instances).each do |master_vm|
+    config.vm.define vm_name = "%s-%01d" % [$instance_name_prefix, master_vm] do |node|
+      ["vmware_fusion", "vmware_workstation"].each do |vmware|
+        node.vm.provider vmware do |v|
+          v.vmx['memsize'] = $vm_memory_master
+          v.vmx['numvcpus'] = $vm_cpus_master
+        end
+      end
+
+      node.vm.provider :virtualbox do |vb|
+        vb.memory = $vm_memory_master
+        vb.cpus = $vm_cpus_master
+      end
+
+      node.vm.provider :libvirt do |lv|
+        lv.memory = $vm_memory_master
+        lv.cpus = $vm_cpus_master
+      end
+    end
+  end
+
+  if($num_instances > $kube_master_instances)
+    (($kube_master_instances + 1)..$num_instances).each do |worker_vm|
+      config.vm.define vm_name = "%s-%01d" % [$instance_name_prefix, worker_vm] do |node|
+        ["vmware_fusion", "vmware_workstation"].each do |vmware|
+          node.vm.provider vmware do |v|
+            v.vmx['memsize'] = $vm_memory
+            v.vmx['numvcpus'] = $vm_cpus
+          end
+        end
+
+        node.vm.provider :virtualbox do |vb|
+          vb.memory = $vm_memory
+          vb.cpus = $vm_cpus
+        end
+
+        node.vm.provider :libvirt do |lv|
+          lv.memory = $vm_memory
+          lv.cpus = $vm_cpus
+        end
+      end
+    end
+  end
+
   (1..$num_instances).each do |i|
     config.vm.define vm_name = "%s-%01d" % [$instance_name_prefix, i] do |node|
 
@@ -132,27 +179,21 @@ Vagrant.configure("2") do |config|
         node.proxy.no_proxy = $no_proxy
       end
 
-      ["vmware_fusion", "vmware_workstation"].each do |vmware|
-        node.vm.provider vmware do |v|
-          v.vmx['memsize'] = $vm_memory
-          v.vmx['numvcpus'] = $vm_cpus
-        end
-      end
-
       node.vm.provider :virtualbox do |vb|
-        vb.memory = $vm_memory
-        vb.cpus = $vm_cpus
         vb.gui = $vm_gui
         vb.linked_clone = true
         vb.customize ["modifyvm", :id, "--vram", "8"] # ubuntu defaults to 256 MB which is a waste of precious RAM
         vb.customize ["modifyvm", :id, "--audio", "none"]
+        vb.customize ["modifyvm", :id, "--hwvirtex", "on"]
+        vb.customize ["modifyvm", :id, "--triplefaultreset", "on"]
+        vb.customize ["modifyvm", :id, "--largepages", "on"]
+        vb.customize ["modifyvm", :id, "--vtxvpid", "on"]
+        vb.customize ["modifyvm", :id, "--graphicscontroller", "vmsvga"]
       end
 
       node.vm.provider :libvirt do |lv|
         lv.nested = $libvirt_nested
         lv.cpu_mode = "host-model"
-        lv.memory = $vm_memory
-        lv.cpus = $vm_cpus
         lv.default_prefix = 'kubespray'
         # Fix kernel panic on fedora 28
         if $os == "fedora"
@@ -260,6 +301,8 @@ Vagrant.configure("2") do |config|
         end
       end
 
+      node.vm.provision "csi-external-snapshotter",  type: "shell", run: "never", path: "provisioning/csi/external-snapshotter.sh"
+      node.vm.provision "csi-driver-host-path",      type: "shell", run: "never", path: "provisioning/csi/driver-host-path.sh"
     end
   end
 end
