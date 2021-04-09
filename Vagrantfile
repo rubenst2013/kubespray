@@ -34,7 +34,7 @@ SUPPORTED_OS = {
   "oraclelinux8"        => {box: "generic/oracle8",            user: "vagrant"},
   "rhel7"               => {box: "generic/rhel7",              user: "vagrant"},
   "rhel8"               => {box: "generic/rhel8",              user: "vagrant"},
-  "minokube-ubuntu2004" => {box: "rst/ubuntu-server-20.04-0.6.0-b02", user: "vagrant"},
+  "minokube-ubuntu2004" => {box: "rst/ubuntu-server-20.04-0.6.0-b04", user: "vagrant"},
 }
 
 if File.exist?(CONFIG)
