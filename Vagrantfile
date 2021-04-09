@@ -42,7 +42,7 @@ if File.exist?(CONFIG)
 end
 
 # Defaults for config options defined in CONFIG
-$num_instances ||= 5
+$num_instances ||= 6
 $instance_name_prefix ||= "k8s"
 $vm_gui ||= false
 $vm_memory ||= 16 * 1024
