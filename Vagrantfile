@@ -35,6 +35,7 @@ SUPPORTED_OS = {
   "rhel7"               => {box: "generic/rhel7",              user: "vagrant"},
   "rhel8"               => {box: "generic/rhel8",              user: "vagrant"},
   "minokube-ubuntu2004" => {box: "rst/ubuntu-server-20.04-0.6.0-b04", user: "vagrant"},
+  "minokube-ubuntu2104" => {box: "rst/ubuntu-server-21.04-0.1.0-b01", user: "vagrant"},
 }
 
 if File.exist?(CONFIG)
@@ -53,7 +54,7 @@ $shared_folders ||= {}
 $forwarded_ports ||= {}
 $subnet ||= "172.18.8"
 $subnet_ipv6 ||= "fd3c:b398:0698:0756"
-$os ||= "minokube-ubuntu2004"
+$os ||= "minokube-ubuntu2104"
 $network_plugin ||= "calico"
 # Setting multi_networking to true will install Multus: https://github.com/intel/multus-cni
 $multi_networking ||= false
@@ -247,7 +248,7 @@ Vagrant.configure("2") do |config|
       node.vm.provision "shell", inline: "swapoff -a"
 
       # ubuntu1804 and ubuntu2004 have IPv6 explicitly disabled. This undoes that.
-      if ["ubuntu1804", "ubuntu2004"].include? $os
+      if ["ubuntu1804", "ubuntu2004", "minokube-ubuntu2004", "minokube-ubuntu2104"].include? $os
         node.vm.provision "shell", inline: "rm -f /etc/modprobe.d/local.conf"
         node.vm.provision "shell", inline: "sed -i '/net.ipv6.conf.all.disable_ipv6/d' /etc/sysctl.d/99-sysctl.conf /etc/sysctl.conf"
       end
